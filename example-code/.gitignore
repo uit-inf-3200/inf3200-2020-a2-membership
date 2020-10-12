@@ -1,0 +1,6 @@
+# Python
+.venv
+*.pyc
+
+# Go
+chord-config.json
