@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import random
 import threading
 import string
@@ -47,7 +48,7 @@ def parse_args():
             help="After a join/leave call, wait for the network to settle (default {} ms)"
                 .format(SETTLE_MS_DEFAULT))
 
-    parser.add_argument("nodes", type=str, nargs="+",
+    parser.add_argument("nodes", type=str, nargs="*",
             help="addresses (host:port) of nodes to test")
 
     return parser.parse_args()
@@ -64,6 +65,13 @@ def search_header_tuple(headers, header_name):
         if key.lower() == header_name:
             return value
     return None
+
+def determine_charset(content_type):
+    cmatch = re.match("text/plain; ?charset=(\\S*)", content_type)
+    if cmatch:
+        return cmatch.group(1)
+    else:
+        return "latin_1"
 
 def do_request(host_port, method, url, body=None, accept_statuses=[200]):
     def describe_request():
@@ -92,6 +100,7 @@ def do_request(host_port, method, url, body=None, accept_statuses=[200]):
             conn.close()
 
     content_type = search_header_tuple(headers, "Content-type")
+
     if content_type == "application/json":
         try:
             body = json.loads(body)
@@ -102,8 +111,10 @@ def do_request(host_port, method, url, body=None, accept_statuses=[200]):
                     + " --- Body start: "
                     + body[:30])
 
-    if content_type == "text/plain" and sys.version_info[0] >= 3:
-        body = body.decode()
+    if content_type != None and content_type.startswith("text/plain") \
+            and sys.version_info[0] >= 3:
+        charset = determine_charset(content_type)
+        body = body.decode(charset)
 
     r2 = Response()
     r2.status = status
@@ -111,6 +122,18 @@ def do_request(host_port, method, url, body=None, accept_statuses=[200]):
     r2.body = body
 
     return r2
+
+class MetaTest(unittest.TestCase):
+
+    def test_determine_charset(self):
+        self.assertEqual(determine_charset("text/plain; charset=utf-8"), "utf-8")
+        "hello utf-8".encode("utf-8").decode("utf-8")
+
+        self.assertEqual(determine_charset("text/plain; charset=latin1"), "latin1")
+        "hello latin1".encode("latin1").decode("latin1")
+
+        self.assertEqual(determine_charset("text/plain"), "latin_1")
+        "hello latin_1".encode("latin_1").decode("latin_1")
 
 class SimpleApiCheck(unittest.TestCase):
 
@@ -247,6 +270,7 @@ if __name__ == "__main__":
     test_suite = unittest.TestSuite()
     test_loader = unittest.TestLoader()
 
+    test_suite.addTests(test_loader.loadTestsFromTestCase(MetaTest))
     test_suite.addTests(test_loader.loadTestsFromTestCase(SimpleApiCheck))
     test_suite.addTests(test_loader.loadTestsFromTestCase(JoinLeaveApiCheck))
     test_suite.addTests(test_loader.loadTestsFromTestCase(SimCrashApiCheck))
