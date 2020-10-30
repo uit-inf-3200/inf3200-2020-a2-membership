@@ -58,13 +58,10 @@ def describe_exception(e):
 class Response(object): pass
 
 def search_header_tuple(headers, header_name):
-    if sys.version_info[0] <= 2:
-        header_name = header_name.lower()
-    elif sys.version_info[0] >= 3:
-        pass
+    header_name = header_name.lower()
 
     for key, value in headers:
-        if key == header_name:
+        if key.lower() == header_name:
             return value
     return None
 
